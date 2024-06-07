@@ -75,32 +75,6 @@ Resources:
                 "aws:SecureTransport": "false"
       Bucket: !Ref DocumentBucket
 
-  EmbeddingQueue:
-    Type: AWS::SQS::Queue
-    DeletionPolicy: Delete
-    UpdateReplacePolicy: Delete
-    Properties:
-      VisibilityTimeout: 180
-      MessageRetentionPeriod: 3600
-
-  EmbeddingQueuePolicy:
-    Type: AWS::SQS::QueuePolicy
-    Properties:
-      Queues:
-        - !Ref EmbeddingQueue
-      PolicyDocument:
-        Version: "2012-10-17"
-        Id: SecureTransportPolicy
-        Statement:
-          - Sid: AllowSecureTransportOnly
-            Effect: Deny
-            Principal: "*"
-            Action: "SQS:*"
-            Resource: "*"
-            Condition:
-              Bool:
-                aws:SecureTransport: false
-
   DocumentTable:
     Type: AWS::DynamoDB::Table
     DeletionPolicy: Delete
@@ -116,7 +90,10 @@ Resources:
           AttributeType: S
         - AttributeName: documentid
           AttributeType: S
-      BillingMode: PAY_PER_REQUEST
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      # BillingMode: PAY_PER_REQUEST
 
   MemoryTable:
     Type: AWS::DynamoDB::Table
@@ -202,13 +179,27 @@ Resources:
             TableName: !Ref MemoryTable
         - S3ReadPolicy:
             BucketName: !Sub "${AWS::StackName}-${AWS::Region}-${AWS::AccountId}*"
-        - SQSSendMessagePolicy:
-            QueueName: !GetAtt EmbeddingQueue.QueueName
+        - Statement:
+            - Sid: "AllowS3HeadObject"
+              Effect: "Allow"
+              Action:
+                - "s3:HeadObject"
+              Resource: !Sub "arn:aws:s3:::${AWS::StackName}-${AWS::Region}-${AWS::AccountId}*/*"
+            - Sid: "BedrockKnowledgeBase"
+              Effect: "Allow"
+              Action:
+                - "bedrock:StartIngestionJob"
+              Resource: !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/*"
+            - Sid: "SSMParameterAccess"
+              Effect: "Allow"
+              Action:
+                - "ssm:GetParameter"
+              Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/serverless-doc-chatai/knowledge-base"
       Environment:
         Variables:
           DOCUMENT_TABLE: !Ref DocumentTable
           MEMORY_TABLE: !Ref MemoryTable
-          QUEUE: !GetAtt EmbeddingQueue.QueueName
+          KNOWLEDGE_BASE_DETAILS_SSM_PATH: !Sub "/serverless-doc-chatai/knowledge-base"
           BUCKET: !Sub "${AWS::StackName}-${AWS::Region}-${AWS::AccountId}"
       Events:
         S3Event:
@@ -283,35 +274,6 @@ Resources:
             Path: /doc/{documentid}
             Method: POST
 
-  GenerateEmbeddingsFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: src/generate_embeddings/
-      Timeout: 180
-      MemorySize: 2048
-      Policies:
-        - SQSPollerPolicy:
-            QueueName: !GetAtt EmbeddingQueue.QueueName
-        - S3CrudPolicy:
-            BucketName: !Ref DocumentBucket
-        - DynamoDBCrudPolicy:
-            TableName: !Ref DocumentTable
-        - Statement:
-            - Sid: "BedrockScopedAccess"
-              Effect: "Allow"
-              Action: "bedrock:InvokeModel"
-              Resource: "arn:aws:bedrock:*::foundation-model/amazon.titan-embed-text-v1"
-      Environment:
-        Variables:
-          DOCUMENT_TABLE: !Ref DocumentTable
-          BUCKET: !Ref DocumentBucket
-      Events:
-        EmbeddingQueueEvent:
-          Type: SQS
-          Properties:
-            Queue: !GetAtt EmbeddingQueue.Arn
-            BatchSize: 1
-
   GenerateResponseFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -323,23 +285,36 @@ Resources:
             TableName: !Ref MemoryTable
         - S3CrudPolicy:
             BucketName: !Ref DocumentBucket
+        - SSMParameterReadPolicy:
+            ParameterName: !Sub "{{resolve:ssm:/serverless-doc-chatai/knowledge-base:1}}"
         - Statement:
             - Sid: "BedrockScopedAccess"
               Effect: "Allow"
-              Action: "bedrock:InvokeModel"
+              Action: 
+                - "bedrock:InvokeModelWithResponseStream"
+                - "bedrock:InvokeModel"
               Resource:
-                - "arn:aws:bedrock:*::foundation-model/anthropic.claude-v2"
-                - "arn:aws:bedrock:*::foundation-model/amazon.titan-embed-text-v1"
+                - "arn:aws:bedrock:*::foundation-model/mistral.mistral-7b-instruct-v0:2"
+            - Sid: "BedrockKnowledgeBase"
+              Effect: "Allow"
+              Action:
+                - "bedrock:StartIngestionJob"
+              Resource: !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/*"
+            - Sid: "SSMParameterAccess"
+              Effect: "Allow"
+              Action:
+                - "ssm:GetParameter"
+              Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/serverless-doc-chatai/knowledge-base"
       Environment:
         Variables:
           MEMORY_TABLE: !Ref MemoryTable
-          BUCKET: !Ref DocumentBucket
+          KNOWLEDGE_BASE_DETAILS_SSM_PATH: !Sub "/serverless-doc-chatai/knowledge-base"
       Events:
         Root:
           Type: Api
           Properties:
             RestApiId: !Ref Api
-            Path: /{documentid}/{conversationid}
+            Path: /{documentid}/{conversationid}/response
             Method: POST
 
   AmplifyApp:
@@ -367,7 +342,7 @@ Resources:
                 paths:
                   - node_modules/**/*
             appRoot: frontend
-      AccessToken: "{{resolve:secretsmanager:serverless-pdf-chat-github-token}}"
+      AccessToken: "{{resolve:secretsmanager:github-access-token}}"
       EnvironmentVariables:
         - Name: AMPLIFY_MONOREPO_APP_ROOT
           Value: frontend
@@ -395,3 +370,6 @@ Outputs:
     Value: !Ref CognitoUserPoolClient
   ApiGatewayBaseUrl:
     Value: !Sub "https://${Api}.execute-api.${AWS::Region}.${AWS::URLSuffix}/dev/"
+  KnowledgeBaseDetails:
+    Description: "Details of the Knowledge Base"
+    Value: !Sub "{{resolve:ssm:/serverless-doc-chatai/knowledge-base:1}}"
