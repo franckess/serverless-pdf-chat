@@ -13,7 +13,7 @@ KNOWLEDGE_BASE_DETAILS_SSM_PATH = os.environ["KNOWLEDGE_BASE_DETAILS_SSM_PATH"]
 
 
 ddb = boto3.resource("dynamodb")
-bedrock = boto3.client("bedrock-agent")
+bedrock = boto3.client("bedrock")
 document_table = ddb.Table(DOCUMENT_TABLE)
 memory_table = ddb.Table(MEMORY_TABLE)
 ssm = boto3.client("ssm")
@@ -41,7 +41,7 @@ def lambda_handler(event, context):
 
     document_id = shortuuid.uuid()
 
-    s3.download_file(BUCKET, key, f"/tmp/{file_name}")
+    s3.download_file(BUCKET, user_id, f"/tmp/{file_name}")
 
     with open(f"/tmp/{file_name}", "rb") as f:
         reader = PyPDF2.PdfReader(f)
@@ -103,4 +103,4 @@ def lambda_handler(event, context):
         json.dump(metadata, metadata_file)
 
     # Upload metadata file to S3
-    s3.upload_file(metadata_file_path, BUCKET, key)
+    s3.upload_file(metadata_file_path, BUCKET, user_id)
