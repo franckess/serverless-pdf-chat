@@ -41,7 +41,7 @@ def lambda_handler(event, context):
 
     document_id = shortuuid.uuid()
 
-    s3.download_file(BUCKET, user_id, f"/tmp/{file_name}")
+    s3.download_file(BUCKET, key, f"/tmp/{file_name}")
 
     with open(f"/tmp/{file_name}", "rb") as f:
         reader = PyPDF2.PdfReader(f)
@@ -103,4 +103,4 @@ def lambda_handler(event, context):
         json.dump(metadata, metadata_file)
 
     # Upload metadata file to S3
-    s3.upload_file(metadata_file_path, BUCKET, user_id)
+    s3.upload_file(metadata_file_path, BUCKET, key)
