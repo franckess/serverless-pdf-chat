@@ -5,6 +5,7 @@ import PyPDF2
 import shortuuid
 import urllib
 from aws_lambda_powertools import Logger
+import pprint
 
 DOCUMENT_TABLE = os.environ["DOCUMENT_TABLE"]
 MEMORY_TABLE = os.environ["MEMORY_TABLE"]

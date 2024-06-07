@@ -33,7 +33,7 @@ def lambda_handler(event, context):
     file_name_full = event["queryStringParameters"]["file_name"]
     file_name = file_name_full.split(".pdf")[0]
 
-    exists = s3_key_exists(BUCKET, f"{user_id}/{file_name_full}/{file_name_full}")
+    exists = s3_key_exists(BUCKET, f"{user_id}/{file_name_full}")
 
     logger.info(
         {
@@ -46,9 +46,9 @@ def lambda_handler(event, context):
 
     if exists:
         suffix = shortuuid.ShortUUID().random(length=4)
-        key = f"{user_id}/{file_name}-{suffix}.pdf/{file_name}-{suffix}.pdf"
+        key = f"{user_id}/{file_name}-{suffix}.pdf"
     else:
-        key = f"{user_id}/{file_name}.pdf/{file_name}.pdf"
+        key = f"{user_id}/{file_name}.pdf"
 
     presigned_url = s3.generate_presigned_url(
         ClientMethod="put_object",
