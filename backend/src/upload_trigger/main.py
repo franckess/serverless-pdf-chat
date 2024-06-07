@@ -104,4 +104,8 @@ def lambda_handler(event, context):
         json.dump(metadata, metadata_file)
 
     # Upload metadata file to S3
-    s3.upload_file(metadata_file_path, BUCKET, key)
+    try:
+        s3.upload_file(metadata_file_path, BUCKET, user_id)
+    except Exception as e:
+        logger.error(f"Failed to upload {metadata_file_path} to {BUCKET}/{user_id}: {e}")
+        raise e
