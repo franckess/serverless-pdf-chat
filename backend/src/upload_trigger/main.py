@@ -6,6 +6,7 @@ import shortuuid
 import urllib
 from aws_lambda_powertools import Logger
 import pprint
+import requests  # You might need to install this with pip if it's not already available
 
 DOCUMENT_TABLE = os.environ["DOCUMENT_TABLE"]
 MEMORY_TABLE = os.environ["MEMORY_TABLE"]
@@ -41,8 +42,25 @@ def lambda_handler(event, context):
     file_name = split[1]
 
     document_id = shortuuid.uuid()
-
     s3.download_file(BUCKET, key, f"/tmp/{file_name}")
+
+    # Generate a presigned URL for uploading a file using PUT operation
+    presigned_url = s3.generate_presigned_url(
+        ClientMethod='put_object',
+        Params={
+            'Bucket': BUCKET,
+            'Key': f"{user_id}/{file_name}",  # Directly using user_id and file_name
+            'ContentType': 'application/octet-stream'  # Adjust ContentType based on your file type
+        },
+        ExpiresIn=600,   # URL expires in 10 minutes
+        HttpMethod="PUT",
+    )
+
+    # Log the presigned URL (for debugging purposes, remove in production)
+    logger.info(f"Generated presigned URL: {presigned_url}")
+
+    # Assuming the file is already in the right place or handled by the client using the presigned URL
+    # No need to download the file, as the client will upload it directly using the presigned URL
 
     with open(f"/tmp/{file_name}", "rb") as f:
         reader = PyPDF2.PdfReader(f)
@@ -89,7 +107,7 @@ def lambda_handler(event, context):
     else:
         logger.error("Failed to fix and decode JSON from SSM parameter.")
 
-    # Create metadata file
+    # Generate metadata file
     metadata = {
         "metadataAttributes": {
             "userid": user_id,
@@ -103,9 +121,23 @@ def lambda_handler(event, context):
     with open(metadata_file_path, 'w') as metadata_file:
         json.dump(metadata, metadata_file)
 
-    # Upload metadata file to S3
-    try:
-        s3.upload_file(metadata_file_path, BUCKET, user_id)
-    except Exception as e:
-        logger.error(f"Failed to upload {metadata_file_path} to {BUCKET}/{user_id}: {e}")
-        raise e
+    # Generate a presigned URL for uploading the metadata file
+    presigned_url = s3.generate_presigned_url(
+        ClientMethod='put_object',
+        Params={
+            'Bucket': BUCKET,
+            'Key': f"{user_id}/{file_name}.metadata.json",
+            'ContentType': 'application/json'  # Set appropriate content type for JSON
+        },
+        ExpiresIn=600  # URL expires in 10 minutes
+    )
+
+    # Upload the metadata file using the presigned URL
+    with open(metadata_file_path, 'rb') as metadata_file:
+        files = {'file': metadata_file}
+        response = requests.put(presigned_url, data=metadata_file.read(), headers={'Content-Type': 'application/json'})
+
+    if response.status_code == 200:
+        logger.info("Metadata file uploaded successfully using presigned URL.")
+    else:
+        logger.error(f"Failed to upload metadata file: {response.text}")
