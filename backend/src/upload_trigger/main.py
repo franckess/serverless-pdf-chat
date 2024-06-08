@@ -14,7 +14,7 @@ KNOWLEDGE_BASE_DETAILS_SSM_PATH = os.environ["KNOWLEDGE_BASE_DETAILS_SSM_PATH"]
 
 
 ddb = boto3.resource("dynamodb")
-bedrock = boto3.client("bedrock")
+bedrock = boto3.client("bedrock-agent")
 document_table = ddb.Table(DOCUMENT_TABLE)
 memory_table = ddb.Table(MEMORY_TABLE)
 ssm = boto3.client("ssm")
