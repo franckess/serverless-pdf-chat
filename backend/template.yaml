@@ -179,7 +179,14 @@ Resources:
             TableName: !Ref MemoryTable
         - S3ReadPolicy:
             BucketName: !Sub "${AWS::StackName}-${AWS::Region}-${AWS::AccountId}*"
+        - S3CrudPolicy:  # This policy allows general CRUD operations on S3
+            BucketName: !Sub "${AWS::StackName}-${AWS::Region}-${AWS::AccountId}*"
         - Statement:
+            - Sid: "AllowS3PutObject"
+              Effect: "Allow"
+              Action:
+                - "s3:PutObject"
+              Resource: !Sub "arn:aws:s3:::${AWS::StackName}-${AWS::Region}-${AWS::AccountId}*/*"
             - Sid: "AllowS3HeadObject"
               Effect: "Allow"
               Action:
