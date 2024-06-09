@@ -17,6 +17,17 @@ s3 = boto3.client("s3")
 ssm = boto3.client("ssm")
 logger = Logger()
 
+def fix_json(json_string):
+    # Replace single quotes with double quotes and escaping internal quotes if needed
+    fixed_json = json_string.replace("'", '"')
+    try:
+        # Try loading the JSON to check if it's valid
+        data = json.loads(fixed_json)
+        return data
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to decode JSON: {e}")
+        return None
+
 
 @logger.inject_lambda_context(log_event=True)
 def lambda_handler(event, context):
@@ -24,11 +35,8 @@ def lambda_handler(event, context):
     human_input = event_body["prompt"]
     conversation_id = event["pathParameters"]["conversationid"]
     param_response = ssm.get_parameter(Name=KNOWLEDGE_BASE_DETAILS_SSM_PATH)
-    knowledge_base_details = json.loads(param_response['Parameter']['Value'])
+    knowledge_base_details = fix_json(param_response['Parameter']['Value'])
     user_id = event["requestContext"]["authorizer"]["claims"]["sub"]
-
-    # s3.download_file(BUCKET, f"{user}/{file_name}/index.faiss", "/tmp/index.faiss")
-    # s3.download_file(BUCKET, f"{user}/{file_name}/index.pkl", "/tmp/index.pkl")
 
     bedrock_runtime = boto3.client(
         service_name="bedrock-runtime",
@@ -43,7 +51,8 @@ def lambda_handler(event, context):
     retriever = AmazonKnowledgeBasesRetriever(
         knowledge_base_id=knowledge_base_details["knowledgeBaseId"],
         retrieval_config={"vectorSearchConfiguration": {"numberOfResults": 4, 
-                                                        "equals": {"key": "userid", "value": user_id}
+                                                        "overrideSearchType": "HYBRID",
+                                                        "filter": {"equals": {"key": "userid", "value": user_id}}
                                                        }
                          },
     )

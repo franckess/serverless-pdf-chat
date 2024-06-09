@@ -1,7 +1,6 @@
 boto3==1.34.66
 botocore==1.34.66
-faiss-cpu==1.7.4
-BeautifulSoup4==4.12.2
 langchain==0.1.13
 langchain_community==0.0.29
 urllib3
+
