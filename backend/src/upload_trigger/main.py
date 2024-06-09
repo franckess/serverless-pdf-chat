@@ -34,6 +34,13 @@ def fix_json(json_string):
         logger.error(f"Failed to decode JSON: {e}")
         return None
 
+def set_doc_status(user_id, document_id, status):
+    document_table.update_item(
+        Key={"userid": user_id, "documentid": document_id},
+        UpdateExpression="SET docstatus = :docstatus",
+        ExpressionAttributeValues={":docstatus": status},
+    )
+
 @logger.inject_lambda_context(log_event=True)
 def lambda_handler(event, context):
     key = urllib.parse.unquote_plus(event["Records"][0]["s3"]["object"]["key"])
@@ -107,6 +114,8 @@ def lambda_handler(event, context):
     else:
         logger.error("Failed to fix and decode JSON from SSM parameter.")
 
+    set_doc_status(user_id, document_id, "READY")
+    
     # Generate metadata file
     metadata = {
         "metadataAttributes": {
