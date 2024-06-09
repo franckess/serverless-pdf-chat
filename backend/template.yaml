@@ -305,8 +305,7 @@ Resources:
             - Sid: "BedrockKnowledgeBase"
               Effect: "Allow"
               Action:
-                - "bedrock:StartIngestionJob"
-                - "bedrock:Retrieve"  # Added this line
+                - "bedrock:Retrieve"
               Resource: !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/*"
             - Sid: "SSMParameterAccess"
               Effect: "Allow"
@@ -322,7 +321,7 @@ Resources:
           Type: Api
           Properties:
             RestApiId: !Ref Api
-            Path: /{documentid}/{conversationid}/response
+            Path: /{documentid}/{conversationid}
             Method: POST
 
   AmplifyApp:
