@@ -306,6 +306,7 @@ Resources:
               Effect: "Allow"
               Action:
                 - "bedrock:StartIngestionJob"
+                - "bedrock:Retrieve"  # Added this line
               Resource: !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/*"
             - Sid: "SSMParameterAccess"
               Effect: "Allow"
