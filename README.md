@@ -140,6 +140,43 @@ In this example, you will create Bedrock Knowledge Base manually via the AWS con
 1. Once the knowledge base is setup, add a SSM parameter in the same region as the SAM stack that contains details of the knowledge base. The application will use these details for connecting. For example if the stack was called `serverless-pdf-chat`, then the following SSM parameter is required:  
     - Name: `/serverless-pdf-chat/knowledge-base` 
     - Value (json string): `{"knowledgeBaseId": "xyz", "dataSourceId": "xyz"}`
+
+Additionally, we apply metadata filtering to our knowledge base to improve the quality of our responses but also to restrict the documents that are indexed to a particular `user_id`. 
+
+1. Create document metadata and upload to S3:
+```python
+metadata = {
+        "metadataAttributes": {
+            "userid": user_id,
+            "documentid": document_id,
+            "filename": file_name,
+            "created": timestamp_str,
+            "pages": pages
+        }
+    }
+metadata_file_path = f"/tmp/{file_name}.metadata.json"
+with open(metadata_file_path, 'w') as metadata_file:
+    json.dump(metadata, metadata_file)
+
+# Upload the metadata file using the presigned URL
+with open(metadata_file_path, 'rb') as metadata_file:
+    files = {'file': metadata_file}
+    response = requests.put(presigned_url, data=metadata_file.read(), headers={'Content-Type': 'application/json'})
+```
+
+2. Apply filters to the knowledge base to retrieve the relevant documents:
+```python
+retriever = AmazonKnowledgeBasesRetriever(
+    knowledge_base_id=knowledge_base_details["knowledgeBaseId"],
+    retrieval_config={"vectorSearchConfiguration": {"numberOfResults": 4, 
+                                                    "overrideSearchType": "HYBRID",
+                                                    "filter": {"equals": {"key": "userid", "value": user_id}}
+                                                    }
+                      },
+)
+```
+
+
 ### Run the React frontend locally
 
 Create a file named `.env.development` in the `frontend` directory. [Vite will use this file](https://vitejs.dev/guide/env-and-mode.html) to set up environment variables when we run the application locally.
